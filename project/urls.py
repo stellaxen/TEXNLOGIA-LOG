@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import include, path
 
 urlpatterns = [
-    # path("stuff/", include("stuff.urls")),
-    path("admin/", admin.site.urls),
-    path('api/', include('stuff.urls')),  # Αντικατέστησε το 'myapp' με το όνομα της εφαρμογής σου
+    path('admin/', admin.site.urls),
+    path('api/performances/', include('performance.urls')),  # Για το app Performance
+    path('api/festivals/', include('festival.urls')),  # Για το app Festival
 ]
