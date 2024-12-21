@@ -32,7 +32,9 @@ class Festival(models.Model):
         ('assignment', 'ASSIGNMENT'), 
         ('review', 'REVIEW'), 
         ('scheduling', 'SCHEDULING'), 
-        ('final_submission', 'FINAL_SUBMISSION')
+        ('final_submission', 'FINAL_SUBMISSION'),
+        ('decision', 'DECISION'), 
+        ('announced', 'ANNOUNCED'), 
     ]    
 
 

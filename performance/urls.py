@@ -1,8 +1,7 @@
-# your_app/urls.py
-
 from django.urls import path
-from .views import PerformanceAPIView
+from .views import PerformanceListAPIView, PerformanceDetailAPIView
 
 urlpatterns = [
-    path('', PerformanceAPIView.as_view(), name='performance-list-create'),
+    path('performances/', PerformanceListAPIView.as_view(), name='performance-list'),
+    path('performances/<int:performance_id>/', PerformanceDetailAPIView.as_view(), name='performance-detail'),
 ]
