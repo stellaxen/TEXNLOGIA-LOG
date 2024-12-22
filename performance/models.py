@@ -1,16 +1,20 @@
 from django.db import models
 from datetime import time
-from django.utils.timezone import now  # Χρήση του timezone για timezone-aware datetime
+from django.utils.timezone import now
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
-
-
+from django.conf import settings
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
-from django.conf import settings
-
 
 class Performance(models.Model):
+    # Συσχέτιση με το Festival
+    festival = models.ForeignKey(
+        'festival.Festival',  # Η πλήρης αναφορά στο μοντέλο Festival της εφαρμογής 'festival'
+        on_delete=models.CASCADE,  # Αν διαγραφεί το festival, διαγράφεται και η παράσταση
+        related_name='performances',  # Συσχέτιση με το όνομα της σχέσης στο Festival μοντέλο
+    )
+
     # Μοναδίκός αριθμός παράστασης που δεν είναι κλείδί στη βάση και τον ενημερώνει η εφαρμογή
     performance_id = models.PositiveIntegerField(editable=False, unique=True, null=True, blank=True)
     # Ημερομηνία δημιουργίας της παράστασης, παίρνει αυτόματα το current datetime
@@ -47,7 +51,7 @@ class Performance(models.Model):
         related_name='performances'  # Για ευκολότερη πρόσβαση από την πλευρά του χρήστη
     )
 
-  # Το πεδίο manager (επιτρέπει την επιλογή ενός χρήστη)
+    # Το πεδίο manager (επιτρέπει την επιλογή ενός χρήστη)
     manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,  # Συνδέεται με το μοντέλο χρήστη
         on_delete=models.SET_NULL,  # Αν διαγραφεί ο χρήστης, το πεδίο γίνεται NULL
@@ -65,17 +69,24 @@ class Performance(models.Model):
 
     administrators = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='performance_admins')
 
-  
     def clean(self):
         # Έλεγχος για ύπαρξη άλλου αντικειμένου με τον ίδιο τίτλο
         if Performance.objects.filter(title=self.title).exclude(pk=self.pk).exists():
-            raise ValidationError(f"Υπάρχει ήδη παράσταση με τίτλο '{self.title}'.")
+            raise ValidationError(f"Η παράσταση με τίτλο '{self.title}' υπάρχει ήδη στο festival '{self.festival.title}'.")
+
+        
+        # Έλεγχος αν το festival_status του συνδεδεμένου Festival είναι "announced"
+        if self.festival.festival_status == 'announced':
+            raise ValidationError(f"Δεν μπορείτε να αλλάξετε το performance_status, καθώς το festival έχει ήδη ανακοινωθεί.")
+        
 
     def save(self, *args, **kwargs):
         # Εκτέλεση του clean() πριν την αποθήκευση
         self.clean()
         super().save(*args, **kwargs)
 
+    def __str__(self):
+        return f"{self.title} - {self.festival.title}"  # Εμφανίζεται ο τίτλος της παράστασης και του festival
 
 # Σήμα για αυτόματη αύξηση του performance_id
 @receiver(pre_save, sender=Performance)

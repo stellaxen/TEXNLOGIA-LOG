@@ -4,6 +4,8 @@ from rest_framework import status
 from .models import Performance
 from .serializers import PerformanceSerializer
 
+from django.core.exceptions import ValidationError
+
 
 class PerformanceListAPIView(APIView):
     def get(self, request, *args, **kwargs):
@@ -13,10 +15,12 @@ class PerformanceListAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
         serializer = PerformanceSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            if serializer.is_valid(raise_exception=True):  # Χρησιμοποιεί raise_exception για να πετάξει το σφάλμα αν είναι άκυρο
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValidationError as e:  # Πιάνουμε την εξαίρεση ValidationError που προκύπτει από το clean()
+            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PerformanceDetailAPIView(APIView):
@@ -35,10 +39,14 @@ class PerformanceDetailAPIView(APIView):
 
     def patch(self, request, performance_id, *args, **kwargs):
         performance = self.get_object(performance_id)
-        if not performance:
-            return Response({"error": "Performance not found"}, status=status.HTTP_404_NOT_FOUND)
-        serializer = PerformanceSerializer(performance, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            if not performance:
+                return Response({"error": "Performance not found"}, status=status.HTTP_404_NOT_FOUND)
+            serializer = PerformanceSerializer(performance, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+        except ValidationError as e:
+            # Εδώ πιάνουμε την εξαίρεση και επιστρέφουμε μόνο το μήνυμα της εξαίρεσης.
+            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+

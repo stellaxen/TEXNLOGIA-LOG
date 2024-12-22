@@ -45,6 +45,9 @@ class Festival(models.Model):
       default='created',  # Προαιρετικά, η προεπιλεγμένη επιλογή
   )
 
+  def __str__(self):
+     return self.title  # Επιστρέφει τον τίτλο του festival για καλύτερη αναπαράσταση
+
 # Σήμα για αυτόματη αύξηση του festival_id
 @receiver(pre_save, sender=Festival)
 def set_festival_id(sender, instance, **kwargs):
