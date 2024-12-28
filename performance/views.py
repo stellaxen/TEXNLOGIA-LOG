@@ -1,11 +1,10 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from .models import Performance
 from .serializers import PerformanceSerializer
-
 from django.core.exceptions import ValidationError
-
 
 class PerformanceListAPIView(APIView):
     def get(self, request, *args, **kwargs):
@@ -39,14 +38,46 @@ class PerformanceDetailAPIView(APIView):
 
     def patch(self, request, performance_id, *args, **kwargs):
         performance = self.get_object(performance_id)
-        try:
-            if not performance:
-                return Response({"error": "Performance not found"}, status=status.HTTP_404_NOT_FOUND)
-            serializer = PerformanceSerializer(performance, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data)
-        except ValidationError as e:
-            # Εδώ πιάνουμε την εξαίρεση και επιστρέφουμε μόνο το μήνυμα της εξαίρεσης.
-            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        if not performance:
+            return Response({"error": "Performance not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        # Έλεγχος αν το festival του performance έχει status 'ANNOUNCED'
+        if performance.festival.festival_status == 'ANNOUNCED':
+            return Response({"error": "Δεν επιτρέπεται η ενημέρωση της παράστασης για festival με κατάσταση 'ANNOUNCED'."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user  # Ο αυθεντικοποιημένος χρήστης
+
+        # Έλεγχος δικαιωμάτων χρήστη για ενημέρωση
+        if performance.created_by != user and user not in performance.administrators.all():
+            raise PermissionDenied("Δεν έχετε δικαίωμα να επεξεργαστείτε αυτή την παράσταση.")
+
+        # Αν περάσει τον έλεγχο, προχωράμε στην ενημέρωση
+        serializer = PerformanceSerializer(performance, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, performance_id, *args, **kwargs):
+        performance = self.get_object(performance_id)
+        if not performance:
+            return Response({"error": "Performance not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Έλεγχος αν το festival του performance έχει status 'ANNOUNCED'
+        if performance.festival.festival_status == 'ANNOUNCED':
+            return Response({"error": "Δεν επιτρέπεται η διαγραφή της παράστασης για festival με κατάσταση 'ANNOUNCED'."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user  # Ο αυθεντικοποιημένος χρήστης
+
+        # Έλεγχος δικαιωμάτων χρήστη για διαγραφή
+        if performance.created_by != user and user not in performance.administrators.all():
+            raise PermissionDenied("Δεν έχετε δικαίωμα να διαγράψετε αυτή την παράσταση.")
+
+        # Αν περάσει τον έλεγχο, προχωράμε στη διαγραφή
+        performance.delete()
+
+        # Επιστρέφουμε μήνυμα επιτυχίας διαγραφής
+        return Response({"message": "Η παράσταση διαγράφηκε με επιτυχία."}, status=status.HTTP_200_OK)

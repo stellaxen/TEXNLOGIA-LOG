@@ -8,6 +8,12 @@ from django.db.models.signals import pre_save
 from django.dispatch import receiver
 
 class Performance(models.Model):
+    class Meta:
+        permissions = [
+            ("can_edit_own_or_administered_performance", "Can edit or delete own or administered performances"),
+        ]
+
+
     # Συσχέτιση με το Festival
     festival = models.ForeignKey(
         'festival.Festival',  # Η πλήρης αναφορά στο μοντέλο Festival της εφαρμογής 'festival'
