@@ -6,6 +6,9 @@ from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from django.conf import settings
 
+from django.db.models.signals import post_save
+from performance.models import Performance
+
 class Festival(models.Model):
   # Μοναδίκός αριθμός festival που δεν είναι κλείδί στη βάση και τον ενημερώνει η εφαρμογή
   festival_id = models.PositiveIntegerField(editable=False, unique=True, null=True, blank=True)
@@ -54,3 +57,8 @@ def set_festival_id(sender, instance, **kwargs):
     if instance.festival_id is None:  # Αν το πεδίο δεν έχει ήδη τιμή
         max_id = sender.objects.aggregate(models.Max('festival_id'))['festival_id__max'] or 0
         instance.festival_id = max_id + 1
+
+@receiver(post_save, sender=Festival)
+def update_performances_on_status_change(sender, instance, **kwargs):
+    if instance.festival_status == 'decision':
+        Performance.objects.filter(festival=instance, performance_status='approved').update(performance_status='rejected')
