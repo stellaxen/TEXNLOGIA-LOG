@@ -1,0 +1,26 @@
+curl -X PATCH http://127.0.0.1:8000/api/performances/19/ ^
+-H "Content-Type: application/json" ^
+-H "Authorization: Bearer YOUR_ACCESS_TOKEN" ^
+-d "{\"performance_status\": \"submitted\"}"
+
+
+
+curl -X PATCH http://127.0.0.1:8000/api/performances/?performance_id=11 ^
+-H "Content-Type: application/json" ^
+-H "Authorization: Bearer YOUR_ACCESS_TOKEN" ^
+-d "{\"performance_status\": \"rejected\"}"
+
+
+
+curl -X PATCH http://127.0.0.1:8000/api/performances/9/ ^
+-H "Content-Type: application/json" ^
+-H "Authorization: Bearer YOUR_ACCESS_TOKEN" ^
+-d "{\"performance_status\": \"rejected\"}"
+
+curl -X PATCH http://127.0.0.1:8000/api/performances/6/ ^
+-H "Content-Type: application/json" ^
+-H "Authorization: Bearer YOUR_ACCESS_TOKEN" ^
+-d "{\"performance_status\": \"rejected\"}">res.html
+
+
+curl -X get http://127.0.0.1:8000/api/performances/600/
