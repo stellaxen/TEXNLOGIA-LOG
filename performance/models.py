@@ -66,6 +66,12 @@ class Performance(models.Model):
         related_name='managed_performance',  # Επιστροφή από την πλευρά του χρήστη
     )
 
+    technical_specs = models.FileField(
+        upload_to='technical_specs/',  # Ο φάκελος όπου θα αποθηκεύονται τα αρχεία
+        blank=True,  # Επιτρέπει το πεδίο να είναι κενό
+        null=True    # Επιτρέπει τη μη ύπαρξη τιμής
+    )
+
     rating = models.IntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)],  # Επαλήθευση τιμών 1-5
         default=5,
@@ -84,6 +90,12 @@ class Performance(models.Model):
         # Έλεγχος αν το festival_status του συνδεδεμένου Festival είναι "announced"
         if self.festival.festival_status == 'announced':
             raise ValidationError(f"Δεν μπορείτε να αλλάξετε το performance_status, καθώς το festival έχει ήδη ανακοινωθεί.")
+        
+        if self.technical_specs:
+            valid_file_types = ['application/pdf', 'text/plain']
+            if self.technical_specs.file.content_type not in valid_file_types:
+                raise ValidationError('Το αρχείο πρέπει να είναι τύπου PDF ή TXT.')
+
         
 
     def save(self, *args, **kwargs):
