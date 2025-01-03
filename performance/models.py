@@ -79,6 +79,8 @@ class Performance(models.Model):
         blank=True  # Επιτρέπει να μείνει κενό στη φόρμα
     )
 
+    comments = models.CharField(max_length=200, blank=True, null=True)
+
     administrators = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='performance_admins')
 
     def clean(self):
