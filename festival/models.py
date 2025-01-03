@@ -3,6 +3,7 @@ from datetime import time
 from django.utils.timezone import now  # Χρήση του timezone για timezone-aware datetime
 
 from django.db.models.signals import pre_save
+from django.core.exceptions import ValidationError
 from django.dispatch import receiver
 from django.conf import settings
 
@@ -47,6 +48,16 @@ class Festival(models.Model):
       choices=STATUSES,  # Οι επιλογές
       default='created',  # Προαιρετικά, η προεπιλεγμένη επιλογή
   )
+
+  def clean(self):
+        # Έλεγχος για ύπαρξη άλλου αντικειμένου με τον ίδιο τίτλο
+        if Festival.objects.filter(title=self.title).exclude(pk=self.pk).exists():
+            raise ValidationError(f"Υπάρχει ήδη καταχωρημένο φεστιβάλ με τίτλο '{self.title}'.")
+        
+  def save(self, *args, **kwargs):
+    # Εκτέλεση του clean() πριν την αποθήκευση
+    self.clean()
+    super().save(*args, **kwargs)
 
   def __str__(self):
      return self.title  # Επιστρέφει τον τίτλο του festival για καλύτερη αναπαράσταση
