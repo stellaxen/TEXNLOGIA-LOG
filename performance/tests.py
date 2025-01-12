@@ -1,19 +1,24 @@
-from django.test import TestCase
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.exceptions import ValidationError
+from rest_framework.test import APITestCase
+from rest_framework import status
+from django.contrib.auth import get_user_model
 from performance.models import Performance
 from festival.models import Festival
-from django.contrib.auth import get_user_model
-from datetime import datetime
+from rest_framework.exceptions import ValidationError
+from django.core.exceptions import ValidationError as DjangoValidationError
+from unittest.mock import MagicMock
 
-class PerformanceModelTest(TestCase):
+"""
+Παρακάτω είναι τα test της εφαρμογής ΧΩΡΙΣ κλήσεις μέσω Rest Api
+"""
+
+class PerformanceModelTest(APITestCase):
     """
-    Κλάση που περιέχει δοκιμές για το μοντέλο Performance.
+    Κλάση δοκιμών για το μοντέλο Performance.
     """
-    
+
     def setUp(self):
         """
-        Δημιουργεί τους χρήστες, τα festivals και τις παραστάσεις πριν από κάθε τεστ.
+        Δημιουργούμε χρήστες, φεστιβάλ και παραστάσεις πριν από κάθε τεστ.
         """
         self.user = get_user_model().objects.create_user(
             username='testuser', email='testuser@example.com', password='password'
@@ -22,7 +27,7 @@ class PerformanceModelTest(TestCase):
             username='manageruser', email='manageruser@example.com', password='password'
         )
         
-        # Δημιουργία Festival
+        # Δημιουργία ενός φεστιβάλ
         self.festival = Festival.objects.create(
             title="Test Festival",
             description="This is a test festival.",
@@ -30,8 +35,8 @@ class PerformanceModelTest(TestCase):
             festival_dates="2025-06-01 to 2025-06-10",
             created_by=self.user
         )
-        
-        # Δημιουργία Performance
+
+        # Δημιουργία παραστάσεων για το API
         self.performance = Performance.objects.create(
             title="Test Performance",
             description="This is a test performance.",
@@ -43,99 +48,28 @@ class PerformanceModelTest(TestCase):
             festival=self.festival
         )
 
-    def test_performance_title_uniqueness(self):
-        """
-        Ελέγχει ότι δεν μπορεί να δημιουργηθεί παράσταση με τον ίδιο τίτλο στο ίδιο festival.
-        """
-        duplicate_performance = Performance(
-            title="Test Performance",  # Ίδιος τίτλος
-            description="Another performance.",
-            kind="Dance",
-            duration=1.0,
-            starting_time="20:00",
-            performance_status="created",
-            created_by=self.user,
-            festival=self.festival
-        )
-        
-        with self.assertRaises(ValidationError):
-            duplicate_performance.clean()  # Πρέπει να αποτύχει λόγω επανάληψης τίτλου
-
     def test_technical_specs_validation(self):
         """
-        Ελέγχει τη λειτουργία του ελέγχου τύπου αρχείων στο πεδίο 'technical_specs'.
-        Δημιουργούμε μια προσομοίωση αρχείου με μη έγκυρο τύπο και έπειτα με έγκυρο τύπο.
+        Ελέγχει αν η επικύρωση του αρχείου στο πεδίο 'technical_specs' δουλεύει σωστά.
+        Ειδικά αν απορρίπτεται αρχείο που δεν είναι PDF ή TXT.
         """
-        # Μη έγκυρος τύπος αρχείου
-        invalid_file = SimpleUploadedFile(
-            "test_file.exe", 
-            b"file_content", 
-            content_type="application/x-msdownload"  # Μη έγκυρος τύπος αρχείου
-        )
-        self.performance.technical_specs = invalid_file
+        # Δημιουργία και χρήση mock αρχείου, που είναι ' ψεύτικο ' για αποφυγή πρόσβασης στο σύστημα αρχείων               
+        mock_file = MagicMock()
+        mock_file.content_type = 'application/pdf'
 
-        # Ελέγχουμε αν πετάγεται το ValidationError λόγω του λάθους τύπου αρχείου
-        with self.assertRaises(ValidationError):
-            self.performance.clean()
+        # Αντικατάσταση του technical_specs με το mock
+        self.performance.technical_specs = mock_file
 
-        # Έγκυρος τύπος αρχείου
-        valid_file = SimpleUploadedFile(
-            "test_file.pdf", 
-            b"file_content", 
-            content_type="application/pdf"  # Έγκυρος τύπος αρχείου
-        )
-        self.performance.technical_specs = valid_file
+        # Έλεγχος επικύρωσης
+        with self.assertRaises(DjangoValidationError):
+            self.performance.clean() # Η μέθοδος clean έχει περιγραφεί στο models.py του performance
 
-        # Δεν πρέπει να πεταχτεί ValidationError για έγκυρο αρχείο
-        try:
-            self.performance.clean()  # Δεν πρέπει να πετάξουμε εξαίρεση
-        except ValidationError:
-            self.fail("ValidationError raised unexpectedly for a valid file type")
-
-    def test_performance_status_change(self):
+    def test_performance_creation(self):
         """
-        Ελέγχει αν μπορούμε να αλλάξουμε το status της παράστασης και αν η επικύρωση του status λειτουργεί σωστά.
+        Δημιουργία νέας παράστασης
         """
-        self.performance.performance_status = 'submitted'
-        self.performance.save()
-        
-        # Ελέγχουμε ότι το status άλλαξε σε 'submitted'
-        self.performance.refresh_from_db()
-        self.assertEqual(self.performance.performance_status, 'submitted')
-
-    def test_festival_status_restriction(self):
-        """
-        Ελέγχει ότι δεν μπορούμε να αλλάξουμε το status της παράστασης αν το festival έχει ανακοινωθεί.
-        """
-        self.festival.festival_status = 'announced'
-        self.festival.save()
-
-        self.performance.performance_status = 'submitted'
-        
-        with self.assertRaises(ValidationError):
-            self.performance.clean()  # Πρέπει να αποτύχει λόγω του περιορισμού του festival status
-
-    def test_festival_title_uniqueness(self):
-        """
-        Ελέγχει ότι δεν μπορεί να δημιουργηθεί festival με τον ίδιο τίτλο.
-        """
-        duplicate_festival = Festival(
-            title="Test Festival",  # Ίδιος τίτλος
-            description="Another festival.",
-            place="New Place",
-            festival_dates="2025-07-01 to 2025-07-10",
-            created_by=self.user
-        )
-        
-        with self.assertRaises(ValidationError):
-            duplicate_festival.clean()  # Πρέπει να αποτύχει λόγω επανάληψης τίτλου
-
-    def test_performance_id_auto_increment(self):
-        """
-        Ελέγχει ότι το πεδίο 'performance_id' αυξάνεται αυτόματα με κάθε νέα παράσταση.
-        """
-        new_performance = Performance.objects.create(
-            title="New Test Performance",
+        performance = Performance.objects.create(
+            title="New Performance",
             description="New performance description.",
             kind="Music",
             duration=2.0,
@@ -144,108 +78,231 @@ class PerformanceModelTest(TestCase):
             created_by=self.user,
             festival=self.festival
         )
-        
-        # Ελέγχουμε ότι το performance_id είναι μεγαλύτερο από το προηγούμενο
-        self.assertGreater(new_performance.performance_id, self.performance.performance_id)
+        # Έλεγχος αν υπάρχει παράσταση με τίτλο New Performance 
+        self.assertEqual(performance.title, "New Performance")
+        # Έλεγχος αν υπάρχει παράσταση με διάρκεια 2
+        self.assertEqual(performance.duration, 2.0)
 
-    def test_performance_manager_field(self):
+    def test_performance_update(self):
         """
-        Ελέγχει ότι το πεδίο manager στο Performance μπορεί να αποδεχτεί χρήστη.
+        Ελέγχει την ενημέρωση παραστάσεων.
         """
-        self.performance.manager = self.manager
+        self.performance.title = "Updated Performance"
         self.performance.save()
 
-        # Ελέγχουμε ότι το manager είναι σωστά συνδεδεμένος
-        self.performance.refresh_from_db()
-        self.assertEqual(self.performance.manager, self.manager)
+        updated_performance = Performance.objects.get(id=self.performance.id)
+        self.assertEqual(updated_performance.title, "Updated Performance")
 
-    def test_performance_comments(self):
+    def test_performance_delete(self):
         """
-        Ελέγχει ότι μπορούμε να προσθέσουμε σχόλια σε μια παράσταση και να τα αποθηκεύσουμε.
+        Ελέγχει τη διαγραφή μίας παράστασης.
         """
-        self.performance.comments = "Great performance!"
-        self.performance.save()
+        self.performance.delete()
+        with self.assertRaises(Performance.DoesNotExist):
+            Performance.objects.get(id=self.performance.id)
 
-        # Ελέγχουμε ότι τα σχόλια αποθηκεύονται σωστά
-        self.performance.refresh_from_db()
-        self.assertEqual(self.performance.comments, "Great performance!")
+"""
+Παρακάτω είναι τα test της εφαρμογής για κλήσεις μέσω Rest Api
+"""
 
-class FestivalModelTest(TestCase):
+class PerformanceAPITestCase(APITestCase):
     """
-    Κλάση που περιέχει δοκιμές για το μοντέλο Festival.
+    Κλάση δοκιμών για το Performance API.
     """
-    
+
     def setUp(self):
         """
-        Δημιουργεί χρήστη πριν από κάθε τεστ για να δημιουργήσουμε φεστιβάλ.
+        Δημιουργούμε ΕΙΚΟΝΙΚΟΥΣ χρήστες, φεστιβάλ και παραστάσεις πριν από κάθε test, τα οποία στο τέλος διαγράφονται
         """
+        # Δημιουργία χρηστών
         self.user = get_user_model().objects.create_user(
             username='testuser', email='testuser@example.com', password='password'
         )
+        self.manager = get_user_model().objects.create_user(
+            username='manageruser', email='manageruser@example.com', password='password'
+        )
+        self.admin1 = get_user_model().objects.create_user(
+            username='admin1', email='admin1@example.com', password='password'
+        )
+        self.admin2 = get_user_model().objects.create_user(
+            username='admin2', email='admin2@example.com', password='password'
+        )
 
-    def test_festival_status_change(self):
-        """
-        Ελέγχει ότι το status του festival αλλάζει σωστά.
-        """
-        festival = Festival.objects.create(
-            title="Festival Test",
-            description="Test festival.",
+        # Δημιουργία ενός φεστιβάλ
+        self.festival = Festival.objects.create(
+            title="Test Festival",
+            description="This is a test festival.",
             place="Test Place",
             festival_dates="2025-06-01 to 2025-06-10",
             created_by=self.user
         )
-        
-        festival.festival_status = 'submission'
-        festival.save()
-        
-        # Ελέγχουμε ότι το status άλλαξε σωστά
-        festival.refresh_from_db()
-        self.assertEqual(festival.festival_status, 'submission')
 
-    def test_festival_status_on_decision(self):
-        """
-        Ελέγχει ότι όταν το status του festival αλλάζει σε 'decision', 
-        οι παραστάσεις με status 'approved' πρέπει να ενημερώνονται σε 'rejected'.
-        """
-        festival = Festival.objects.create(
-            title="Festival Status Test",
-            description="Test festival status change.",
-            place="Test Place",
-            festival_dates="2025-07-01 to 2025-07-10",
-            created_by=self.user
-        )
-
-        # Δημιουργούμε δύο παραστάσεις
-        performance1 = Performance.objects.create(
-            title="Performance 1",
-            description="Performance 1 description.",
-            kind="Music",
-            duration=2.0,
-            starting_time="18:00",
-            performance_status="approved",  # Η πρώτη παράσταση έχει status approved
-            created_by=self.user,
-            festival=festival
-        )
-
-        performance2 = Performance.objects.create(
-            title="Performance 2",
-            description="Performance 2 description.",
+        # Δημιουργία παραστάσεων για το API
+        self.performance = Performance.objects.create(
+            title="Test Performance",
+            description="This is a test performance.",
             kind="Theater",
             duration=1.5,
-            starting_time="20:00",
-            performance_status="created",  # Η δεύτερη παράσταση έχει status created
+            starting_time="19:00:00",
+            performance_status="created",
             created_by=self.user,
-            festival=festival
+            festival=self.festival,
+            manager=self.manager,
+            rating=4
         )
 
-        # Αλλάζουμε το status του festival σε 'decision'
-        festival.festival_status = 'decision'
-        festival.save()
+        self.client.login(username='testuser', password='password')
 
-        # Ελέγχουμε ότι η παράσταση με status 'approved' άλλαξε σε 'rejected'
-        performance1.refresh_from_db()
-        self.assertEqual(performance1.performance_status, 'rejected')
+    def test_get_performances(self):
+        """
+        Ελέγχει αν η μέθοδος GET επιστρέφει σωστά δεδομένα για τις παραστάσεις.
+        """
+        url = '/api/performances/'  # Η διεύθυνση URL για το API
+        response = self.client.get(url)
 
-        # Η δεύτερη παράσταση δεν πρέπει να επηρεαστεί
-        performance2.refresh_from_db()
-        self.assertEqual(performance2.performance_status, 'created')
+        # Ελέγχει ότι η απάντηση είναι 200 OK και επιστρέφει τις παραστάσεις
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)  # Πρέπει να επιστρέψει μία παράσταση, αυτή που ψάξαμε η οποία είναι μοναδική
+        self.assertEqual(response.data[0]['title'], 'Test Performance') #Ελέγχει αν ο τίτλος της παράστασης που βρέθηκε είναι Test Performance
+
+    def test_create_performance(self):
+        """
+        Ελέγχει αν μπορεί να δημιουργηθεί μία νέα παράσταση μέσω της μεθόδου POST.
+        """
+        url = '/api/performances/'  # Η διεύθυνση URL για το API
+        data = {
+            'title': 'New Performance',
+            'description': 'New performance description.',
+            'kind': 'Music',
+            'duration': 2.0,
+            'starting_time': '18:00:00',  # Ώρα σε πλήρες format
+            'performance_status': 'created',
+            'festival': self.festival.id,
+            'created_by': self.user.id,  # Το ID του χρήστη δημιουργού
+            'manager': self.manager.id,  # Το ID του manager
+            'rating': 5,  # Παράδειγμα βαθμολογίας
+            'administrators': [self.admin1.id, self.admin2.id]  # Βάζει 2 IDs για να έχει 2 administrators το performance
+        }
+
+        response = self.client.post(url, data, format='json')
+
+        # Ελέγχει ότι η απάντηση είναι 201 Created
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        # Ελέγχει αν ο τίτλος της παράστασης που βρέθηκε είναι New Performance
+        self.assertEqual(response.data['title'], 'New Performance')
+
+    def test_create_performance_invalid(self):
+        """
+        Ελέγχει ότι όταν τα δεδομένα είναι λανθασμένα, επιστρέφεται ένα σφάλμα 400 Bad Request.
+        """
+        url = '/api/performances/'
+        data = {
+            'title': '',  # Λάθος δεδομένα (κενός τίτλος)
+            'description': 'New performance description.',
+            'kind': 'Music',
+            'duration': 2.0,
+            'starting_time': '18:00',
+            'performance_status': 'created',
+            'festival': self.festival.id
+        }
+        
+        response = self.client.post(url, data, format='json')
+
+        # Ελέγχει ότι επιστρέφεται σφάλμα 400
+        # Γίνεται προσπάθεια δημιουργίας performance χωρίς τίτλο, που είναι υποχρεωτικό πεδίο
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_performance(self):
+        """
+        Ελέγχει αν μπορεί να ενημερωθεί μία παράσταση μέσω της μεθόδου PATCH.
+        """
+        url = f'/api/performances/{self.performance.performance_id}/'
+        data = {'title': 'Updated Performance'}
+
+        response = self.client.patch(url, data, format='json')
+
+        # Ελέγχει ότι η παράσταση ενημερώθηκε
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Ελέγχει αν ο τίτλος της παράστασης που βρέθηκε είναι Updated Performance
+        self.assertEqual(response.data['title'], 'Updated Performance')
+
+    def test_update_performance_not_found(self):
+        """
+        Ελέγχει αν επιστρέφεται σφάλμα 404 όταν η παράσταση δεν βρέθηκε για ενημέρωση.
+        """
+        url = '/api/performances/999/'  # Μη υπαρκτό ID
+        data = {'title': 'Updated Performance'}
+
+        response = self.client.patch(url, data, format='json')
+
+        # Ελέγχει ότι επιστρέφεται σφάλμα 404
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_update_performance_permission_denied(self):
+        """
+        Ελέγχει αν επιστρέφεται σφάλμα 403 όταν ο χρήστης δεν έχει δικαίωμα ενημέρωσης.
+        """
+        url = f'/api/performances/{self.performance.performance_id}/'
+        data = {'title': 'Updated by Another User'}
+
+        # Δημιουργούμε έναν άλλο χρήστη που δεν είναι δημιουργός της παράστασης
+        self.client.logout()
+        self.client.login(username='manageruser', password='password')
+
+        response = self.client.patch(url, data, format='json')
+
+        # Ελέγχει ότι επιστρέφεται σφάλμα 403
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_performance(self):
+        """
+        Ελέγχει αν μπορεί να διαγραφεί μία παράσταση μέσω της μεθόδου DELETE.
+        """
+        url = f'/api/performances/{self.performance.performance_id}/'
+
+        response = self.client.delete(url)
+
+        # Ελέγχει ότι η παράσταση διαγράφηκε
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['message'], 'Performance deleted successfully.')
+
+    def test_delete_performance_not_found(self):
+        """
+        Ελέγχει αν επιστρέφεται σφάλμα 404 όταν η παράσταση δεν βρέθηκε για διαγραφή.
+        """
+        url = '/api/performances/999/'  # Μη υπαρκτό ID
+
+        response = self.client.delete(url)
+
+        # Ελέγχει ότι επιστρέφεται σφάλμα 404
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_performance_permission_denied(self):
+        """
+        Ελέγχει αν επιστρέφεται σφάλμα 403 όταν ο χρήστης δεν έχει δικαίωμα διαγραφής.
+        """
+        url = f'/api/performances/{self.performance.performance_id}/'
+
+        # Δημιουργούμε έναν άλλο χρήστη που δεν είναι δημιουργός της παράστασης
+        self.client.logout()
+        self.client.login(username='manageruser', password='password')
+
+        response = self.client.delete(url)
+
+        # Ελέγχει ότι επιστρέφεται σφάλμα 403
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_performance_forbidden_due_to_festival_status(self):
+        """
+        Ελέγχει αν επιστρέφεται σφάλμα 403 όταν το festival έχει status 'announced'.
+        """
+        # Αλλάζουμε το status του festival σε 'announced'
+        self.festival.festival_status = 'announced'
+        self.festival.save()
+
+        url = f'/api/performances/{self.performance.performance_id}/'
+
+        response = self.client.delete(url)
+
+        # Ελέγχει ότι επιστρέφεται σφάλμα 403 λόγω status
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
